@@ -6,7 +6,7 @@ use rand::rngs::OsRng;
 use secp256k1::{
     constants::{COMPACT_SIGNATURE_SIZE, PUBLIC_KEY_SIZE, SECRET_KEY_SIZE},
     ecdsa::Signature,
-    Message, PublicKey, Secp256k1, SecretKey, All,
+    All, Message, PublicKey, Secp256k1, SecretKey,
 };
 use sha2::{Digest, Sha256};
 
@@ -36,9 +36,14 @@ pub fn address_from_hex(hex_str: &str) -> Result<Address, ChainError> {
     let bytes = hex::decode(hex_str)
         .map_err(|e| ChainError::CryptoError(format!("Invalid hex address: {}", e)))?;
     if bytes.len() != 32 {
-        return Err(ChainError::CryptoError(format!("Address must be 32 bytes, got {}", bytes.len())));
+        return Err(ChainError::CryptoError(format!(
+            "Address must be 32 bytes, got {}",
+            bytes.len()
+        )));
     }
-    Ok(bytes.try_into().unwrap())
+    bytes
+        .try_into()
+        .map_err(|_| ChainError::CryptoError("Failed to convert bytes into address".to_string()))
 }
 
 #[derive(Debug, Clone)]
@@ -102,10 +107,11 @@ impl KeyPair {
 
     /// Signs a message (which is first hashed using SHA-256) and returns the compact signature bytes.
     pub fn sign(&self, message: &[u8]) -> Result<[u8; COMPACT_SIGNATURE_SIZE], ChainError> {
-        let hash: [u8; 32] = Sha256::digest(message).into();
+        let digest = Sha256::digest(message);
 
-        // Safe unwrap is possible here because the digest is guaranteed 32 bytes
-        let message = Message::from_digest_slice(&hash).expect("SHA-256 hash is always 32 bytes");
+        // Create message from digest; propagate any error
+        let message = Message::from_digest_slice(&digest)
+            .map_err(|e| ChainError::CryptoError(format!("Failed to create message: {}", e)))?;
 
         // Using the context from the static Lazy
         let signature = SECP256K1_CONTEXT.sign_ecdsa(&message, &self.secret_key);
@@ -143,10 +149,10 @@ pub fn verify_signature(
         .map_err(|e| ChainError::CryptoError(format!("Invalid public key: {}", e)))?;
 
     // Hash the message
-    let hash: [u8; 32] = Sha256::digest(message).into();
+    let digest = Sha256::digest(message);
 
-    // Safe unwrap is possible here because the digest is guaranteed 32 bytes
-    let message = Message::from_digest_slice(&hash).expect("SHA-256 hash is always 32 bytes");
+    let message = Message::from_digest_slice(&digest)
+        .map_err(|e| ChainError::CryptoError(format!("Failed to create message: {}", e)))?;
 
     let signature = Signature::from_compact(signature_bytes)
         .map_err(|e| ChainError::CryptoError(format!("Invalid signature: {}", e)))?;
@@ -240,19 +246,28 @@ mod tests {
         // Invalid pubkey length
         let result = verify_signature(&pubkey_bytes[1..], message, &signature);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Public key must be exactly"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Public key must be exactly"));
 
         // Invalid signature length
         let result = verify_signature(&pubkey_bytes, message, &signature[1..]);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Signature must be exactly"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Signature must be exactly"));
     }
-    
+
     #[test]
     fn test_from_secret_bytes_invalid_length() {
         let short_bytes = [0u8; SECRET_KEY_SIZE - 1];
         let result = KeyPair::from_secret_bytes(&short_bytes);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Secret key must be"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Secret key must be"));
     }
 }

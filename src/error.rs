@@ -64,3 +64,6 @@ impl From<Box<bincode::ErrorKind>> for ChainError {
         ChainError::BincodeError(err.to_string())
     }
 }
+
+/// Convenience alias used across the crate
+pub type Result<T> = std::result::Result<T, ChainError>;

@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tower_http::cors::{CorsLayer, AllowOrigin};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::ServeDir;
 
 use crate::blockchain::{Block, Blockchain, Sha256Hash};
@@ -198,17 +198,28 @@ impl Node {
                         break;
                     }
 
-                    let last_block = bc.blocks.last().unwrap();
+                    let last_block = match bc.blocks.last() {
+                        Some(b) => b.clone(),
+                        None => {
+                            eprintln!("Cannot determine last block: chain appears empty");
+                            break;
+                        }
+                    };
                     let transactions = bc.mempool.get_all_transactions();
                     let height = bc.blocks.len() as u64;
                     let reward = Blockchain::calculate_block_reward(height);
 
                     let mut address = [0u8; 32];
-                    hex::decode_to_slice(&miner_address, &mut address).unwrap();
+                    if let Err(e) = hex::decode_to_slice(&miner_address, &mut address) {
+                        eprintln!("Invalid miner address while mining: {}", e);
+                        break;
+                    }
 
                     let coinbase_tx = Transaction::Coinbase(CoinbaseTx {
                         reward_area: Coord::from_num(reward),
-                        beneficiary_address: address,                        nonce: 0,                    });
+                        beneficiary_address: address,
+                        nonce: 0,
+                    });
 
                     let mut all_txs = vec![coinbase_tx];
                     all_txs.extend(transactions);
@@ -557,6 +568,10 @@ async fn get_blockchain_height(State(node): State<Arc<Node>>) -> impl IntoRespon
     Json(blockchain.blocks.len() as u64)
 }
 
+fn hash_to_hex(hash: &Sha256Hash) -> String {
+    hash.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 async fn get_blocks(
     State(node): State<Arc<Node>>,
     Query(params): Query<PaginationQuery>,
@@ -576,17 +591,39 @@ async fn get_blocks(
         }));
     }
 
-    let blocks: Vec<_> = blockchain
+    let blocks_json: Vec<_> = blockchain
         .blocks
         .iter()
         .rev()
         .skip(offset as usize)
         .take(limit as usize)
-        .cloned()
+        .map(|b| {
+            let reward = b
+                .transactions
+                .iter()
+                .find_map(|tx| {
+                    if let crate::transaction::Transaction::Coinbase(cb) = tx {
+                        Some(cb.reward_area.to_num::<f64>())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0.0);
+            serde_json::json!({
+                "index": b.header.height,
+                "timestamp": b.header.timestamp,
+                "hash": hash_to_hex(&b.hash()),
+                "previous_hash": hash_to_hex(&b.header.previous_hash),
+                "difficulty": b.header.difficulty,
+                "nonce": b.header.nonce,
+                "transactions": b.transactions,
+                "reward": reward
+            })
+        })
         .collect();
 
     Json(serde_json::json!({
-        "blocks": blocks,
+        "blocks": blocks_json,
         "total": total,
         "page": params.page,
         "limit": limit
@@ -764,7 +801,6 @@ async fn get_address_transactions(
 
     // We will collect transactions found on the blockchain and transactions found in the mempool.
     let mut transactions: Vec<TransactionHistoryEntry> = Vec::new();
-
 
     // 1. Search confirmed transactions in the blockchain
     // We iterate backwards from the latest block for common chronological display in wallets.

@@ -125,14 +125,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let other_party = if is_sender {
                             let addr_hex = address_to_hex(&transfer_tx.new_owner);
                             if addr_hex.len() > 20 {
-                                format!("To: {}...{}", &addr_hex[..8], &addr_hex[addr_hex.len() - 8..])
+                                format!(
+                                    "To: {}...{}",
+                                    &addr_hex[..8],
+                                    &addr_hex[addr_hex.len() - 8..]
+                                )
                             } else {
                                 format!("To: {}", addr_hex)
                             }
                         } else {
                             let addr_hex = address_to_hex(&transfer_tx.sender);
                             if addr_hex.len() > 20 {
-                                format!("From: {}...{}", &addr_hex[..8], &addr_hex[addr_hex.len() - 8..])
+                                format!(
+                                    "From: {}...{}",
+                                    &addr_hex[..8],
+                                    &addr_hex[addr_hex.len() - 8..]
+                                )
                             } else {
                                 format!("From: {}", addr_hex)
                             }

@@ -1,3 +1,4 @@
+#![allow(clippy::multiple_bound_locations)]
 //! Caching layer for frequently accessed blockchain data
 //!
 //! Provides LRU caching for:
@@ -8,10 +9,10 @@ use crate::blockchain::{Block, Sha256Hash};
 use crate::geometry::Triangle;
 use lru::LruCache;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::marker::PhantomData;
 
 // Re-export for convenience in implementing the trait bounds
 pub use std::hash::Hash;
@@ -238,8 +239,6 @@ impl BlockCache {
         Self::new_lru(capacity)
     }
 
-
-
     pub async fn stats(&self) -> (usize, usize) {
         (self.len().await, self.capacity().await)
     }
@@ -254,7 +253,6 @@ impl UtxoCache {
     pub fn new(capacity: usize) -> Self {
         Self::new_lru(capacity)
     }
-
 
     pub async fn stats(&self) -> (usize, usize) {
         (self.len().await, self.capacity().await)
@@ -301,7 +299,6 @@ impl Default for BalanceCache {
         Self::new()
     }
 }
-
 
 /// Combined cache for all blockchain data
 pub struct BlockchainCache {
@@ -350,78 +347,84 @@ impl Clone for BlockchainCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blockchain::{BlockHeader};
+    use crate::blockchain::BlockHeader;
 
     #[tokio::test]
     async fn test_block_cache() {
-        let cache = BlockCache::new(10);
-        let hash = [0u8; 32];
-        let block = Block {
-            header: BlockHeader {
-                height: 1,
-                previous_hash: [0; 32],
-                timestamp: 0,
-                difficulty: 1,
-                nonce: 0,
-                merkle_root: [0; 32],
-            },
-            transactions: vec![],
-        };
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let cache = BlockCache::new(10);
+            let hash = [0u8; 32];
+            let block = Block {
+                header: BlockHeader {
+                    height: 1,
+                    previous_hash: [0; 32],
+                    timestamp: 0,
+                    difficulty: 1,
+                    nonce: 0,
+                    merkle_root: [0; 32],
+                },
+                transactions: vec![],
+            };
 
-        cache.put(hash, block.clone()).await;
-        let retrieved = cache.get(&hash).await;
-        assert!(retrieved.is_some());
-        assert_eq!(cache.len().await, 1);
-        
-        let removed = cache.remove(&hash).await;
-        assert!(removed.is_some());
-        assert_eq!(cache.len().await, 0);
+            cache.put(hash, block.clone()).await;
+            let retrieved = cache.get(&hash).await;
+            assert!(retrieved.is_some());
+            assert_eq!(cache.len().await, 1);
+
+            let removed = cache.remove(&hash).await;
+            assert!(removed.is_some());
+            assert_eq!(cache.len().await, 0);
+        }).await.expect("test_block_cache timed out");
     }
 
     #[tokio::test]
     async fn test_balance_cache() {
-        let cache = BalanceCache::new();
-        let addr = "test_address".to_string();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let cache = BalanceCache::new();
+            let addr = "test_address".to_string();
 
-        cache.set(addr.clone(), 100500).await;
-        let balance = cache.get_balance(&addr).await;
-        assert_eq!(balance, Some(100500));
+            cache.set(addr.clone(), 100500).await;
+            let balance = cache.get_balance(&addr).await;
+            assert_eq!(balance, Some(100500));
 
-        let removed = cache.invalidate(&addr).await;
-        assert_eq!(removed, Some(100500));
-        let balance = cache.get_balance(&addr).await;
-        assert!(balance.is_none());
+            let removed = cache.invalidate(&addr).await;
+            assert_eq!(removed, Some(100500));
+            let balance = cache.get_balance(&addr).await;
+            assert!(balance.is_none());
+        }).await.expect("test_balance_cache timed out");
     }
 
     #[tokio::test]
     async fn test_utxo_cache_lru_eviction() {
-        let cache = UtxoCache::new(5);
-        let triangle = Triangle::genesis();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let cache = UtxoCache::new(5);
+            let triangle = Triangle::genesis();
 
-        // Fill cache to capacity
-        for i in 0..5 {
-            let mut hash = [0u8; 32];
-            hash[0] = i as u8;
-            cache.put(hash, triangle.clone()).await;
-        }
+            // Fill cache to capacity
+            for i in 0..5 {
+                let mut hash = [0u8; 32];
+                hash[0] = i as u8;
+                cache.put(hash, triangle.clone()).await;
+            }
 
-        let (size, cap) = cache.stats().await;
-        assert_eq!(size, 5);
-        assert_eq!(cap, 5);
+            let (size, cap) = cache.stats().await;
+            assert_eq!(size, 5);
+            assert_eq!(cap, 5);
 
-        // Add one more, should evict oldest (0)
-        let hash_to_evict = [0u8; 32];
-        let mut hash_new = [0u8; 32];
-        hash_new[0] = 6;
-        cache.put(hash_new, triangle.clone()).await;
+            // Add one more, should evict oldest (0)
+            let hash_to_evict = [0u8; 32];
+            let mut hash_new = [0u8; 32];
+            hash_new[0] = 6;
+            cache.put(hash_new, triangle.clone()).await;
 
-        let (size, _) = cache.stats().await;
-        assert_eq!(size, 5); 
+            let (size, _) = cache.stats().await;
+            assert_eq!(size, 5);
 
-        let evicted_check = cache.get(&hash_to_evict).await;
-        assert!(evicted_check.is_none()); 
+            let evicted_check = cache.get(&hash_to_evict).await;
+            assert!(evicted_check.is_none());
         
-        let new_check = cache.get(&hash_new).await;
-        assert!(new_check.is_some()); 
+            let new_check = cache.get(&hash_new).await;
+            assert!(new_check.is_some());
+        }).await.expect("test_utxo_cache_lru_eviction timed out");
     }
 }

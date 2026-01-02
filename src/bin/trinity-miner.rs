@@ -459,7 +459,9 @@ async fn mining_loop(
     network: Option<Arc<NetworkNode>>,
 ) {
     let db = Database::open("trinitychain.db").expect("Failed to open database");
-    let mut chain = db.load_blockchain().unwrap_or_else(|_| Blockchain::new([0; 32], 1).unwrap());
+    let mut chain = db
+        .load_blockchain()
+        .unwrap_or_else(|_| Blockchain::new([0; 32], 1).unwrap());
 
     let start_time = Instant::now();
     let mut blocks_mined = 0;
@@ -486,7 +488,8 @@ async fn mining_loop(
             nonce: 0,
         });
 
-        let mut new_block = Block::new(new_height, last_block.hash(), difficulty, vec![coinbase_tx]);
+        let mut new_block =
+            Block::new(new_height, last_block.hash(), difficulty, vec![coinbase_tx]);
 
         if new_block.header.timestamp <= last_block.header.timestamp {
             new_block.header.timestamp = last_block.header.timestamp + 1;
@@ -520,7 +523,8 @@ async fn mining_loop(
             network.broadcast_block(&new_block).await;
         }
 
-        if let Err(_e) = db.save_blockchain_state(&new_block, &chain.state, chain.difficulty as u64) {
+        if let Err(_e) = db.save_blockchain_state(&new_block, &chain.state, chain.difficulty as u64)
+        {
             // Handle error silently
         }
 

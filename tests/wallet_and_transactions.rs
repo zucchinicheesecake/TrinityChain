@@ -1,10 +1,10 @@
 //! Integration tests for wallet creation and transaction handling
 
-use trinitychain::wallet::Wallet;
-use trinitychain::blockchain::Blockchain;
-use trinitychain::transaction::{Transaction, TransferTx};
-use trinitychain::geometry::Coord;
 use tempfile::TempDir;
+use trinitychain::blockchain::Blockchain;
+use trinitychain::geometry::Coord;
+use trinitychain::transaction::{Transaction, TransferTx};
+use trinitychain::wallet::Wallet;
 
 /// Helper to create a test wallet
 fn create_test_wallet(name: &str) -> Result<Wallet, Box<dyn std::error::Error>> {

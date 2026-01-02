@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
-use trinitychain::persistence::Database;
+use sha2::{Digest, Sha256};
 use trinitychain::crypto::Address;
 use trinitychain::geometry::Coord;
-use sha2::{Digest, Sha256};
+use trinitychain::persistence::Database;
 
 fn address_from_string(s: &str) -> Address {
     let mut hasher = Sha256::new();
@@ -21,7 +21,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let balance_f: f64 = balance.to_num();
 
     println!("Address: miner");
-    println!("Chain height: {}", chain.blocks.last().map(|b| b.header.height).unwrap_or(0));
+    println!(
+        "Chain height: {}",
+        chain.blocks.last().map(|b| b.header.height).unwrap_or(0)
+    );
     println!("Balance (raw Coord): {:?}", balance);
     println!("Balance (as f64): {:.6}", balance_f);
 

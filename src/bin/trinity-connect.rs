@@ -32,9 +32,9 @@ async fn connect_peer(addr: &str) {
     println!("🔗 Connecting to peer: {}", addr);
     let config = load_config().expect("Failed to load config");
     let db = Database::open(&config.database.path).expect("DB open failed");
-    let blockchain = db.load_blockchain().unwrap_or_else(|_| {
-        Blockchain::new([0; 32], 1).expect("Failed to create new blockchain")
-    });
+    let blockchain = db
+        .load_blockchain()
+        .unwrap_or_else(|_| Blockchain::new([0; 32], 1).expect("Failed to create new blockchain"));
     let node = Arc::new(NetworkNode::new(Arc::new(RwLock::new(blockchain))));
 
     let parts: Vec<&str> = addr.split(':').collect();

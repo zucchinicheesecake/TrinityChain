@@ -375,62 +375,72 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_peer() {
-        let sync = NodeSynchronizer::new();
-        let node = Node::new("127.0.0.1".to_string(), 8333);
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let sync = NodeSynchronizer::new();
+            let node = Node::new("127.0.0.1".to_string(), 8333);
 
-        assert!(sync.register_peer(node.clone(), 100).await.is_ok());
-        assert_eq!(sync.peer_count().await, 1);
+            assert!(sync.register_peer(node.clone(), 100).await.is_ok());
+            assert_eq!(sync.peer_count().await, 1);
+        }).await.expect("test_register_peer timed out");
     }
 
     #[tokio::test]
     async fn test_get_best_peer() {
-        let sync = NodeSynchronizer::new();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let sync = NodeSynchronizer::new();
 
-        let node1 = Node::new("127.0.0.1".to_string(), 8333);
-        let node2 = Node::new("127.0.0.2".to_string(), 8334);
+            let node1 = Node::new("127.0.0.1".to_string(), 8333);
+            let node2 = Node::new("127.0.0.2".to_string(), 8334);
 
-        sync.register_peer(node1, 100).await.unwrap();
-        sync.register_peer(node2, 200).await.unwrap();
+            sync.register_peer(node1, 100).await.unwrap();
+            sync.register_peer(node2, 200).await.unwrap();
 
-        let best = sync.get_best_peer().await;
-        assert!(best.is_some());
-        assert_eq!(best.unwrap().port, 8334);
+            let best = sync.get_best_peer().await;
+            assert!(best.is_some());
+            assert_eq!(best.unwrap().port, 8334);
+        }).await.expect("test_get_best_peer timed out");
     }
 
     #[tokio::test]
     async fn test_sync_stats() {
-        let sync = NodeSynchronizer::new();
-        let node = Node::new("127.0.0.1".to_string(), 8333);
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let sync = NodeSynchronizer::new();
+            let node = Node::new("127.0.0.1".to_string(), 8333);
 
-        sync.register_peer(node.clone(), 100).await.unwrap();
-        sync.record_block_received(&node.addr()).await.unwrap();
+            sync.register_peer(node.clone(), 100).await.unwrap();
+            sync.record_block_received(&node.addr()).await.unwrap();
 
-        let stats = sync.get_stats().await;
-        assert_eq!(stats.blocks_synced_this_session, 1);
+            let stats = sync.get_stats().await;
+            assert_eq!(stats.blocks_synced_this_session, 1);
+        }).await.expect("test_sync_stats timed out");
     }
 
     #[tokio::test]
     async fn test_peer_failure_tracking() {
-        let sync = NodeSynchronizer::new();
-        let node = Node::new("127.0.0.1".to_string(), 8333);
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let sync = NodeSynchronizer::new();
+            let node = Node::new("127.0.0.1".to_string(), 8333);
 
-        sync.register_peer(node.clone(), 100).await.unwrap();
+            sync.register_peer(node.clone(), 100).await.unwrap();
 
-        // Record 3 failures
-        for _ in 0..3 {
-            sync.record_sync_failure(&node.addr()).await.unwrap();
-        }
+            // Record 3 failures
+            for _ in 0..3 {
+                sync.record_sync_failure(&node.addr()).await.unwrap();
+            }
 
-        let info = sync.get_peer_info(&node.addr()).await;
-        assert!(info.unwrap().is_unreliable());
+            let info = sync.get_peer_info(&node.addr()).await;
+            assert!(info.unwrap().is_unreliable());
+        }).await.expect("test_peer_failure_tracking timed out");
     }
 
     #[tokio::test]
     async fn test_pending_blocks_queue() {
-        let sync = NodeSynchronizer::new();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let sync = NodeSynchronizer::new();
 
-        assert!(!sync.has_pending_blocks().await);
+            assert!(!sync.has_pending_blocks().await);
 
-        assert_eq!(sync.peer_count().await, 0);
+            assert_eq!(sync.peer_count().await, 0);
+        }).await.expect("test_pending_blocks_queue timed out");
     }
 }

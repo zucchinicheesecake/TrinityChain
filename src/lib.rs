@@ -44,14 +44,14 @@
 // Core Blockchain
 // ============================================================================
 pub mod blockchain;
-pub mod transaction;
 pub mod mempool;
+pub mod transaction;
 
 // ============================================================================
 // Geometric System
 // ============================================================================
-pub mod geometry;
 pub mod fees;
+pub mod geometry;
 
 // ============================================================================
 // Consensus & Mining
@@ -67,16 +67,16 @@ pub mod security;
 // ============================================================================
 // State Management
 // ============================================================================
-pub mod wallet;
+pub mod cache;
 pub mod hdwallet;
 pub mod persistence;
-pub mod cache;
+pub mod wallet;
 
 // ============================================================================
 // Networking
 // ============================================================================
-pub mod network;
 pub mod discovery;
+pub mod network;
 pub mod sync;
 
 // ============================================================================
@@ -88,7 +88,7 @@ pub mod api;
 // ============================================================================
 // Configuration & Utilities
 // ============================================================================
+pub mod addressbook;
+pub mod cli;
 pub mod config;
 pub mod error;
-pub mod cli;
-pub mod addressbook;

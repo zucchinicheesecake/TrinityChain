@@ -1,5 +1,5 @@
 //! Address book for managing labeled addresses with production-grade features
-//! 
+//!
 //! This module provides a thread-safe, validated address book with atomic operations,
 //! audit trails, and comprehensive error handling.
 
@@ -49,9 +49,13 @@ impl AddressEntry {
         let address = address.trim().to_string();
         let notes = notes.and_then(|n| {
             let trimmed = n.trim().to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
         });
-        
+
         validate_label(&label)?;
         validate_address(&address)?;
         if let Some(ref n) = notes {
@@ -184,16 +188,22 @@ impl AddressBook {
         }
 
         // Check for duplicate address
-        if inner.address_index.contains_key(&address) {
-            let existing_label = inner.address_index.get(&address).unwrap();
-            let existing_entry = inner.entries.get(existing_label).unwrap();
-            return Err(ChainError::WalletError(format!(
-                "Address already exists with label '{}'",
-                existing_entry.label
-            )));
+        if let Some(existing_label) = inner.address_index.get(&address) {
+            if let Some(existing_entry) = inner.entries.get(existing_label) {
+                return Err(ChainError::WalletError(format!(
+                    "Address already exists with label '{}'",
+                    existing_entry.label
+                )));
+            } else {
+                return Err(ChainError::WalletError(
+                    "Address already exists".to_string(),
+                ));
+            }
         }
 
-        let final_notes = notes.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let final_notes = notes
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
 
         let entry = AddressEntry::new(trimmed_label, address.clone(), final_notes)?;
 
@@ -242,18 +252,27 @@ impl AddressBook {
 
         // Check for duplicate address if updating address (before getting mutable reference)
         if let Some(ref new_addr) = new_address {
-            if new_addr != &old_address && inner.address_index.contains_key(new_addr) {
-                let existing_label = inner.address_index.get(new_addr).unwrap();
-                let existing_entry = inner.entries.get(existing_label).unwrap();
-                return Err(ChainError::WalletError(format!(
-                    "Address already exists with label '{}'",
-                    existing_entry.label
-                )));
+            if new_addr != &old_address {
+                if let Some(existing_label) = inner.address_index.get(new_addr) {
+                    if let Some(existing_entry) = inner.entries.get(existing_label) {
+                        return Err(ChainError::WalletError(format!(
+                            "Address already exists with label '{}'",
+                            existing_entry.label
+                        )));
+                    } else {
+                        return Err(ChainError::WalletError(
+                            "Address already exists".to_string(),
+                        ));
+                    }
+                }
             }
         }
 
         // Now we can safely get the mutable reference
-        let entry = inner.entries.get_mut(&key).unwrap(); // Safe: we checked existence above
+        let entry = inner
+            .entries
+            .get_mut(&key)
+            .ok_or_else(|| ChainError::WalletError(format!("Label '{}' not found", label)))?;
 
         entry.update(new_address.clone(), new_notes)?;
 
@@ -404,7 +423,7 @@ impl AddressBook {
             inner: Arc::new(RwLock::new(inner)),
         })
     }
-    
+
     /// Load from path, or return new empty book if file doesn't exist
     pub fn load_or_new(path: &Path) -> Result<Self, ChainError> {
         if path.exists() {
@@ -474,7 +493,8 @@ fn validate_label(label: &str) -> Result<(), ChainError> {
     // Check for valid characters (alphanumeric, spaces, basic punctuation)
     if !label
         .chars()
-        .all(|c| c.is_alphanumeric() || c.is_whitespace() || "-_.,()[]{}".contains(c)) {
+        .all(|c| c.is_alphanumeric() || c.is_whitespace() || "-_.,()[]{}".contains(c))
+    {
         return Err(ChainError::WalletError(
             "Label contains invalid characters".to_string(),
         ));
@@ -546,11 +566,18 @@ mod tests {
     #[test]
     fn test_addressbook_add_and_get() {
         let book = AddressBook::new();
-        book.add("Alice".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None)
-            .unwrap();
+        book.add(
+            "Alice".to_string(),
+            "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+            None,
+        )
+        .unwrap();
         let entry = book.get("alice").unwrap();
         assert_eq!(entry.label, "Alice");
-        assert_eq!(entry.address, "00000000000000000000000000000000000000000000000000000000000abc123");
+        assert_eq!(
+            entry.address,
+            "00000000000000000000000000000000000000000000000000000000000abc123"
+        );
     }
 
     #[test]
@@ -561,7 +588,7 @@ mod tests {
             "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
             Some("  Friend  ".to_string()),
         );
-        
+
         if result.is_err() {
             eprintln!("Add failed: {:?}", result);
         }
@@ -569,25 +596,36 @@ mod tests {
 
         let entry = book.get("alice").unwrap();
         assert_eq!(entry.label, "Alice");
-        assert_eq!(entry.address, "00000000000000000000000000000000000000000000000000000000000abc123");
+        assert_eq!(
+            entry.address,
+            "00000000000000000000000000000000000000000000000000000000000abc123"
+        );
         assert_eq!(entry.notes.as_deref(), Some("Friend"));
     }
 
     #[test]
     fn test_empty_notes_handling() {
         let book = AddressBook::new();
-        book.add("Bob".into(), "0000000000000000000000000000000000000000000000000000000000000123".into(), Some("   ".into()))
-            .unwrap();
-        
+        book.add(
+            "Bob".into(),
+            "0000000000000000000000000000000000000000000000000000000000000123".into(),
+            Some("   ".into()),
+        )
+        .unwrap();
+
         let entry = book.get("bob").unwrap();
-        assert!(entry.notes.is_none()); 
+        assert!(entry.notes.is_none());
     }
 
     #[test]
     fn test_addressbook_case_insensitive() {
         let book = AddressBook::new();
-        book.add("Alice".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None)
-            .unwrap();
+        book.add(
+            "Alice".to_string(),
+            "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+            None,
+        )
+        .unwrap();
 
         assert!(book.get("alice").is_some());
         assert!(book.get("ALICE").is_some());
@@ -597,40 +635,65 @@ mod tests {
     #[test]
     fn test_addressbook_duplicate_label() {
         let book = AddressBook::new();
-        book.add("Alice".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None)
-            .unwrap();
+        book.add(
+            "Alice".to_string(),
+            "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+            None,
+        )
+        .unwrap();
 
-        let result = book.add("alice".to_string(), "0000000000000000000000000000000000000000000000000000000000def456".to_string(), None);
+        let result = book.add(
+            "alice".to_string(),
+            "0000000000000000000000000000000000000000000000000000000000def456".to_string(),
+            None,
+        );
         assert!(result.is_err());
     }
 
     #[test]
     fn test_addressbook_duplicate_address() {
         let book = AddressBook::new();
-        book.add("Alice".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None)
-            .unwrap();
+        book.add(
+            "Alice".to_string(),
+            "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+            None,
+        )
+        .unwrap();
 
-        let result = book.add("Bob".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None);
+        let result = book.add(
+            "Bob".to_string(),
+            "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+            None,
+        );
         assert!(result.is_err());
     }
 
     #[test]
     fn test_addressbook_remove() {
         let book = AddressBook::new();
-        book.add("Bob".to_string(), "0000000000000000000000000000000000000000000000000000000000def456".to_string(), None)
-            .unwrap();
+        book.add(
+            "Bob".to_string(),
+            "0000000000000000000000000000000000000000000000000000000000def456".to_string(),
+            None,
+        )
+        .unwrap();
 
         let removed = book.remove("bob").unwrap();
         assert_eq!(removed.label, "Bob");
         assert!(book.get("bob").is_none());
-        assert!(!book.contains_address("0000000000000000000000000000000000000000000000000000000000def456"));
+        assert!(!book
+            .contains_address("0000000000000000000000000000000000000000000000000000000000def456"));
     }
 
     #[test]
     fn test_addressbook_update() {
         let book = AddressBook::new();
-        book.add("Alice".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None)
-            .unwrap();
+        book.add(
+            "Alice".to_string(),
+            "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+            None,
+        )
+        .unwrap();
 
         book.update(
             "Alice",
@@ -640,7 +703,10 @@ mod tests {
         .unwrap();
 
         let entry = book.get("alice").unwrap();
-        assert_eq!(entry.address, "0000000000000000000000000000000000000000000000000000000000xyz789");
+        assert_eq!(
+            entry.address,
+            "0000000000000000000000000000000000000000000000000000000000xyz789"
+        );
         assert_eq!(entry.notes.as_deref(), Some("Updated notes"));
         assert_eq!(entry.version, 2);
     }
@@ -654,8 +720,12 @@ mod tests {
             Some("Friend".to_string()),
         )
         .unwrap();
-        book.add("Bob".to_string(), "0000000000000000000000000000000000000000000000000000000000def456".to_string(), Some("Colleague".to_string()))
-            .unwrap();
+        book.add(
+            "Bob".to_string(),
+            "0000000000000000000000000000000000000000000000000000000000def456".to_string(),
+            Some("Colleague".to_string()),
+        )
+        .unwrap();
 
         let results = book.search("friend");
         assert_eq!(results.len(), 1);
@@ -664,17 +734,23 @@ mod tests {
         let results = book.search("abc");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].label, "Alice");
-        
+
         assert_eq!(book.search("  ").len(), 0);
     }
 
     #[test]
     fn test_addressbook_get_by_address() {
         let book = AddressBook::new();
-        book.add("Alice".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None)
-            .unwrap();
+        book.add(
+            "Alice".to_string(),
+            "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+            None,
+        )
+        .unwrap();
 
-        let entry = book.get_by_address("00000000000000000000000000000000000000000000000000000000000abc123").unwrap();
+        let entry = book
+            .get_by_address("00000000000000000000000000000000000000000000000000000000000abc123")
+            .unwrap();
         assert_eq!(entry.label, "Alice");
     }
 
@@ -685,10 +761,18 @@ mod tests {
 
         let book1 = AddressBook::new();
         book1
-            .add("Alice".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None)
+            .add(
+                "Alice".to_string(),
+                "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+                None,
+            )
             .unwrap();
         book1
-            .add("Bob".to_string(), "0000000000000000000000000000000000000000000000000000000000def456".to_string(), None)
+            .add(
+                "Bob".to_string(),
+                "0000000000000000000000000000000000000000000000000000000000def456".to_string(),
+                None,
+            )
             .unwrap();
 
         book1.save(&path).unwrap();
@@ -697,22 +781,32 @@ mod tests {
         assert_eq!(book2.len(), 2);
         assert!(book2.get("alice").is_some());
         assert!(book2.get("bob").is_some());
-        assert!(book2.contains_address("00000000000000000000000000000000000000000000000000000000000abc123"));
-        assert!(book2.contains_address("0000000000000000000000000000000000000000000000000000000000def456"));
+        assert!(book2
+            .contains_address("00000000000000000000000000000000000000000000000000000000000abc123"));
+        assert!(book2
+            .contains_address("0000000000000000000000000000000000000000000000000000000000def456"));
     }
 
     #[test]
     fn test_validation_label_too_long() {
         let book = AddressBook::new();
         let long_label = "a".repeat(MAX_LABEL_LENGTH + 1);
-        let result = book.add(long_label, "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None);
+        let result = book.add(
+            long_label,
+            "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+            None,
+        );
         assert!(result.is_err());
     }
 
     #[test]
     fn test_validation_empty_label() {
         let book = AddressBook::new();
-        let result = book.add("".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None);
+        let result = book.add(
+            "".to_string(),
+            "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+            None,
+        );
         assert!(result.is_err());
     }
 
@@ -728,14 +822,19 @@ mod tests {
             Some("Friend".to_string()),
         )
         .unwrap();
-        book.add("Bob".to_string(), "0000000000000000000000000000000000000000000000000000000000def456".to_string(), None)
-            .unwrap();
+        book.add(
+            "Bob".to_string(),
+            "0000000000000000000000000000000000000000000000000000000000def456".to_string(),
+            None,
+        )
+        .unwrap();
 
         book.export_csv(&csv_path).unwrap();
 
         let csv_content = fs::read_to_string(&csv_path).unwrap();
         assert!(csv_content.contains("Alice"));
-        assert!(csv_content.contains("00000000000000000000000000000000000000000000000000000000000abc123"));
+        assert!(csv_content
+            .contains("00000000000000000000000000000000000000000000000000000000000abc123"));
         assert!(csv_content.contains("Bob"));
     }
 
@@ -748,12 +847,20 @@ mod tests {
 
         let handle = thread::spawn(move || {
             book_clone
-                .add("Alice".to_string(), "00000000000000000000000000000000000000000000000000000000000abc123".to_string(), None)
+                .add(
+                    "Alice".to_string(),
+                    "00000000000000000000000000000000000000000000000000000000000abc123".to_string(),
+                    None,
+                )
                 .unwrap();
         });
 
-        book.add("Bob".to_string(), "0000000000000000000000000000000000000000000000000000000000def456".to_string(), None)
-            .unwrap();
+        book.add(
+            "Bob".to_string(),
+            "0000000000000000000000000000000000000000000000000000000000def456".to_string(),
+            None,
+        )
+        .unwrap();
 
         handle.join().unwrap();
         assert_eq!(book.len(), 2);

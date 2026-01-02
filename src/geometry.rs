@@ -214,30 +214,12 @@ impl Triangle {
         let child_value = self.effective_value() / 3;
 
         // Create the three new triangles at the corners
-        let t1 = Triangle::new_with_value(
-            self.a,
-            mid_ab,
-            mid_ca,
-            parent_hash,
-            self.owner,
-            child_value,
-        );
-        let t2 = Triangle::new_with_value(
-            mid_ab,
-            self.b,
-            mid_bc,
-            parent_hash,
-            self.owner,
-            child_value,
-        );
-        let t3 = Triangle::new_with_value(
-            mid_ca,
-            mid_bc,
-            self.c,
-            parent_hash,
-            self.owner,
-            child_value,
-        );
+        let t1 =
+            Triangle::new_with_value(self.a, mid_ab, mid_ca, parent_hash, self.owner, child_value);
+        let t2 =
+            Triangle::new_with_value(mid_ab, self.b, mid_bc, parent_hash, self.owner, child_value);
+        let t3 =
+            Triangle::new_with_value(mid_ca, mid_bc, self.c, parent_hash, self.owner, child_value);
 
         [t1, t2, t3]
     }

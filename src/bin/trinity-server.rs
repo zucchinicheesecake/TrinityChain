@@ -261,9 +261,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     let db = Database::open(&config.database.path).expect("Failed to open database");
-    let chain = db.load_blockchain().unwrap_or_else(|_| {
-        Blockchain::new([0; 32], 1).expect("Failed to create new blockchain")
-    });
+    let chain = db
+        .load_blockchain()
+        .unwrap_or_else(|_| Blockchain::new([0; 32], 1).expect("Failed to create new blockchain"));
 
     let state = ServerData {
         chain: Arc::new(RwLock::new(chain.clone())),

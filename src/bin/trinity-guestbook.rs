@@ -85,7 +85,9 @@ async fn sign(message: &str, wallet_name: Option<&str>) -> Result<(), Box<dyn st
         .utxo_set
         .iter()
         .find(|(hash, triangle)| {
-            triangle.owner == from_address_bytes && !locked_triangles.contains(*hash) && triangle.effective_value() >= Coord::from_num(0.0001)
+            triangle.owner == from_address_bytes
+                && !locked_triangles.contains(*hash)
+                && triangle.effective_value() >= Coord::from_num(0.0001)
         })
         .ok_or("No UTXOs available to pay for the guestbook signing fee.")?;
 
