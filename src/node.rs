@@ -6,9 +6,6 @@ use crate::network::NetworkNode;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn, error};
-use axum::{routing::get, Router, Json, extract::State};
-use hyper::Server;
-use serde_json::json;
 use std::fs;
 use std::net::TcpListener;
 use std::time::Duration;
@@ -214,74 +211,22 @@ impl Node {
 
     #[cfg(feature = "api")]
     async fn start_api(node: Arc<Self>, port: u16) -> Result<(), Box<dyn std::error::Error>> {
-        // Handlers using `State<Arc<Node>>` to access node internals
-        async fn status_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
-            let bc = node.blockchain.clone();
-            let net = node.network.clone();
-            let state = node.state.clone();
-            let height = bc.read().await.blocks.len();
-            let peers_list: Vec<_> = net.list_peers().await;
-            let peers = peers_list.len();
-            let node_state: NodeState = state.read().await.clone();
-            Json(json!({
-                "status": "ok",
-                "node_state": format!("{:?}", node_state),
-                "chain_height": height,
-                "peer_count": peers,
-                "mining_enabled": node.config.miner.enabled
-            }))
-        }
+        // Build a shared API node that observes the authoritative orchestrator
+        // state (blockchain + network) and hand it to the production-grade
+        // router implemented in `src/api.rs`.
+        let api_node = crate::api::Node::new_shared(
+            node.blockchain.clone(),
+            node.network.clone(),
+            Some(node.state.clone()),
+        );
+        let api_node = std::sync::Arc::new(api_node);
 
-        async fn node_state_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
-            let s: NodeState = node.state.read().await.clone();
-            Json(json!({"state": format!("{:?}", s)}))
-        }
+        // Ensure the API server binds to the same port requested by the node
+        std::env::set_var("PORT", port.to_string());
 
-        async fn peers_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
-            let peers: Vec<_> = node.network.list_peers().await;
-            let list: Vec<String> = peers.into_iter().map(|p| format!("{}:{}", p.host, p.port)).collect();
-            Json(json!({"peers": list}))
-        }
+        info!("Starting axum API server (shared) on 0.0.0.0:{}", port);
 
-        async fn chain_head_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
-            let last = node.blockchain.read().await.blocks.last().cloned();
-            if let Some(b) = last {
-                Json(json!({
-                    "height": b.header.height,
-                    "hash": hex::encode(b.hash()),
-                    "difficulty": b.header.difficulty,
-                    "timestamp": b.header.timestamp
-                }))
-            } else {
-                Json(json!({"height": 0}))
-            }
-        }
-
-        async fn mempool_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
-            let mp = node.mempool.read().await;
-            let count = mp.len();
-            Json(json!({"tx_count": count}))
-        }
-
-        async fn mining_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
-            let cfg = node.config.miner.clone();
-            let s: NodeState = node.state.read().await.clone();
-            Json(json!({"enabled": cfg.enabled, "state": format!("{:?}", s), "threads": cfg.threads }))
-        }
-
-        let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
-        info!("Starting axum API server on {}", addr);
-
-        let app = Router::new()
-            .route("/status", get(status_handler))
-            .route("/node/state", get(node_state_handler))
-            .route("/peers", get(peers_handler))
-            .route("/chain/head", get(chain_head_handler))
-            .route("/mempool", get(mempool_handler))
-            .route("/mining/status", get(mining_handler))
-            .with_state(node.clone());
-
-        Server::bind(&addr).serve(app.into_make_service()).await?;
+        crate::api::run_api_server(api_node).await?;
         Ok(())
     }
 

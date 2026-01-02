@@ -49,6 +49,8 @@ const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 pub struct Node {
     pub blockchain: Arc<RwLock<Blockchain>>,
     pub network: Arc<NetworkNode>,
+    // Optional shared orchestrator state (NodeState) for health checks and logging
+    pub state: Option<Arc<RwLock<crate::node::NodeState>>>,
     is_mining: Arc<AtomicBool>,
     blocks_mined: Arc<AtomicU64>,
     mining_task: Arc<RwLock<Option<JoinHandle<()>>>>,
@@ -136,6 +138,27 @@ impl Node {
         Self {
             blockchain: blockchain_arc,
             network: network_arc,
+            state: None,
+            is_mining: Arc::new(AtomicBool::new(false)),
+            blocks_mined: Arc::new(AtomicU64::new(0)),
+            mining_task: Arc::new(RwLock::new(None)),
+            api_stats: Arc::new(RwLock::new(ApiStats::new())),
+        }
+    }
+
+    /// Create a new API node that shares the provided blockchain and network
+    /// instances. This is useful for integrating the API server with the
+    /// authoritative `trinity-node` orchestrator so both services observe the
+    /// same in-memory chain and peer list.
+    pub fn new_shared(
+        blockchain: Arc<RwLock<Blockchain>>,
+        network: Arc<NetworkNode>,
+        state: Option<Arc<RwLock<crate::node::NodeState>>>,
+    ) -> Self {
+        Self {
+            blockchain: blockchain.clone(),
+            network: network.clone(),
+            state: state.clone(),
             is_mining: Arc::new(AtomicBool::new(false)),
             blocks_mined: Arc::new(AtomicU64::new(0)),
             mining_task: Arc::new(RwLock::new(None)),
@@ -475,9 +498,99 @@ async fn stats_middleware(State(node): State<Arc<Node>>, req: Request, next: Nex
     response
 }
 
+/// Detailed request logging middleware. Logs method, path, status, duration
+/// and current `NodeState` (when available).
+async fn logging_middleware(
+    State(node): State<Arc<Node>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let start = Instant::now();
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+
+    let response = next.run(req).await;
+
+    let duration = start.elapsed();
+    let status = response.status();
+
+    let node_state = if let Some(s) = &node.state {
+        format!("{:?}", s.read().await.clone())
+    } else {
+        "unknown".to_string()
+    };
+
+    tracing::info!(
+        method = %method,
+        path = %path,
+        status = %status.as_u16(),
+        duration_ms = %duration.as_millis(),
+        node_state = %node_state,
+        "api.request"
+    );
+
+    response
+}
+
 // ============================================================================
 // API Server
 // ============================================================================
+
+/// Build the API router with all endpoints (for testing)
+pub fn build_api_router(node: Arc<Node>) -> Router {
+    // CORS configuration - allow all origins with credentials
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::mirror_request()) // Reflect the request's origin
+        .allow_methods(vec![
+            http::Method::GET,
+            http::Method::POST,
+            http::Method::OPTIONS,
+        ]) // Explicitly allow methods
+        .allow_headers(vec![http::header::CONTENT_TYPE]) // Explicitly allow headers
+        .allow_credentials(true);
+
+    // API routes
+    let api_routes = Router::new()
+        // Blockchain endpoints
+        .route("/blockchain/height", get(get_blockchain_height))
+        .route("/blockchain/blocks", get(get_blocks))
+        .route("/blockchain/block/:height", get(get_block_by_height))
+        .route("/blockchain/stats", get(get_blockchain_stats))
+        // Transaction endpoints
+        .route("/transaction", post(submit_transaction))
+        .route("/transaction/:hash", get(get_transaction))
+        .route("/mempool", get(get_mempool))
+        // Mining endpoints
+        .route("/mining/start", post(start_mining))
+        .route("/mining/stop", post(stop_mining))
+        .route("/mining/status", get(get_mining_status))
+        // Network endpoints
+        .route("/network/peers", get(get_peers))
+        .route("/network/info", get(get_network_info))
+        // Address endpoints
+        .route("/address/:addr/balance", get(get_address_balance))
+        .route("/address/:addr/transactions", get(get_address_transactions))
+        // Wallet endpoints
+        .route("/wallet/create", post(create_wallet))
+        // System endpoints
+        .route("/health", get(health_check))
+        .route("/stats", get(get_api_stats))
+        // logging before stats so we always record timing and node-state
+        .layer(middleware::from_fn_with_state(node.clone(), logging_middleware))
+        .layer(middleware::from_fn_with_state(
+            node.clone(),
+            stats_middleware,
+        ))
+        .with_state(node)
+        .layer(cors.clone());
+
+    // Serve static dashboard files
+    let serve_dir = ServeDir::new("dashboard/dist");
+    Router::new()
+        .nest("/api", api_routes)
+        .fallback_service(serve_dir)
+        .layer(cors)
+}
 
 /// Run the API server with production-grade configuration
 pub async fn run_api_server(node: Arc<Node>) -> Result<(), Box<dyn std::error::Error>> {
@@ -518,6 +631,8 @@ pub async fn run_api_server(node: Arc<Node>) -> Result<(), Box<dyn std::error::E
         // System endpoints
         .route("/health", get(health_check))
         .route("/stats", get(get_api_stats))
+        // logging before stats so we always record timing and node-state
+        .layer(middleware::from_fn_with_state(node.clone(), logging_middleware))
         .layer(middleware::from_fn_with_state(
             node.clone(),
             stats_middleware,
@@ -556,11 +671,41 @@ pub async fn run_api_server(node: Arc<Node>) -> Result<(), Box<dyn std::error::E
 // Route Handlers
 // ============================================================================
 
-async fn health_check() -> impl IntoResponse {
-    Json(serde_json::json!({
-        "status": "healthy",
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    }))
+async fn health_check(State(node): State<Arc<Node>>) -> impl IntoResponse {
+    // If the orchestrator provided a `NodeState`, use it to determine health.
+    if let Some(s) = &node.state {
+        let state = s.read().await.clone();
+        match state {
+            crate::node::NodeState::Ready => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "healthy",
+                    "node_state": format!("{:?}", state),
+                    "timestamp": chrono::Utc::now().to_rfc3339()
+                })),
+            )
+                .into_response(),
+            _ => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "status": "unhealthy",
+                    "node_state": format!("{:?}", state),
+                    "timestamp": chrono::Utc::now().to_rfc3339()
+                })),
+            )
+                .into_response(),
+        }
+    } else {
+        // No orchestrator state available — assume healthy
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "healthy",
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            })),
+        )
+            .into_response()
+    }
 }
 
 async fn get_blockchain_height(State(node): State<Arc<Node>>) -> impl IntoResponse {
