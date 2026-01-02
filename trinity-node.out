@@ -1,0 +1,58 @@
+   Compiling trinitychain v0.2.0 (/workspaces/TrinityChain)
+warning: unused imports: `Router` and `routing::get`
+ --> src/node.rs:9:12
+  |
+9 | use axum::{routing::get, Router, Json};
+  |            ^^^^^^^^^^^^  ^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `mempool`
+   --> src/node.rs:217:13
+    |
+217 |         let mempool = node.mempool.clone();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_mempool`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `status_handler`
+   --> src/node.rs:228:13
+    |
+228 |         let status_handler = move || {
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_status_handler`
+
+warning: unused variable: `node_state_handler`
+   --> src/node.rs:247:13
+    |
+247 |         let node_state_handler = move || {
+    |             ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_node_state_handler`
+
+warning: unused variable: `peers_handler`
+   --> src/node.rs:255:13
+    |
+255 |         let peers_handler = move || {
+    |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_peers_handler`
+
+warning: unused variable: `chain_head_handler`
+   --> src/node.rs:264:13
+    |
+264 |         let chain_head_handler = move || {
+    |             ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chain_head_handler`
+
+warning: unused variable: `mempool_handler`
+   --> src/node.rs:281:13
+    |
+281 |         let mempool_handler = move || {
+    |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_mempool_handler`
+
+warning: unused variable: `mining_handler`
+   --> src/node.rs:289:13
+    |
+289 |         let mining_handler = move || {
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_mining_handler`
+
+warning: `trinitychain` (lib) generated 8 warnings (run `cargo fix --lib -p trinitychain` to apply 8 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.93s
+     Running `target/debug/trinity-node`
+[2m2026-01-02T17:33:05.785873Z[0m [32m INFO[0m [2mtrinitychain::node[0m[2m:[0m Starting TrinityChain node (network_id = devnet)
+Error: "P2P port 8000 unavailable: Address already in use (os error 98)"

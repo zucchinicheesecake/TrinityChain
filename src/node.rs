@@ -6,6 +6,9 @@ use crate::network::NetworkNode;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn, error};
+use axum::{routing::get, Router, Json, extract::State};
+use hyper::Server;
+use serde_json::json;
 use std::fs;
 use std::net::TcpListener;
 use std::time::Duration;
@@ -70,9 +73,13 @@ impl Node {
 
     pub async fn start(self: Arc<Self>) -> Result<(), Box<dyn std::error::Error>> {
         // Enforce deterministic startup order.
-        // 1) Ensure data directory exists
-        let data_dir = &self.config.database.path;
-        fs::create_dir_all(data_dir).map_err(|e| format!("Failed to create data dir {}: {}", data_dir, e))?;
+        // 1) Ensure data directory (parent of DB path) exists
+        let db_path = std::path::Path::new(&self.config.database.path);
+        if let Some(parent) = db_path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent).map_err(|e| format!("Failed to create data dir {:?}: {}", parent, e))?;
+            }
+        }
 
         // 2) Ensure P2P port is available
         let p2p_port = self.config.network.p2p_port;
@@ -88,7 +95,6 @@ impl Node {
                 error!("P2P server failed: {}", e);
             }
         });
-
         // give network a moment to bind/listen
         tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -204,13 +210,78 @@ impl Node {
         }
     }
 
-    #[cfg(feature = "api")]
-    async fn start_api(_node: Arc<Self>, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+    
 
-        // For now: register routes but avoid spawning a real HTTP server in test builds to
-        // prevent dependency/version mismatches; the `trinity-node` will still provide
-        // the authoritative API when compiled with the correct feature flags.
-        info!("API server (stub) available on port {}", port);
+    #[cfg(feature = "api")]
+    async fn start_api(node: Arc<Self>, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+        // Handlers using `State<Arc<Node>>` to access node internals
+        async fn status_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
+            let bc = node.blockchain.clone();
+            let net = node.network.clone();
+            let state = node.state.clone();
+            let height = bc.read().await.blocks.len();
+            let peers_list: Vec<_> = net.list_peers().await;
+            let peers = peers_list.len();
+            let node_state: NodeState = state.read().await.clone();
+            Json(json!({
+                "status": "ok",
+                "node_state": format!("{:?}", node_state),
+                "chain_height": height,
+                "peer_count": peers,
+                "mining_enabled": node.config.miner.enabled
+            }))
+        }
+
+        async fn node_state_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
+            let s: NodeState = node.state.read().await.clone();
+            Json(json!({"state": format!("{:?}", s)}))
+        }
+
+        async fn peers_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
+            let peers: Vec<_> = node.network.list_peers().await;
+            let list: Vec<String> = peers.into_iter().map(|p| format!("{}:{}", p.host, p.port)).collect();
+            Json(json!({"peers": list}))
+        }
+
+        async fn chain_head_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
+            let last = node.blockchain.read().await.blocks.last().cloned();
+            if let Some(b) = last {
+                Json(json!({
+                    "height": b.header.height,
+                    "hash": hex::encode(b.hash()),
+                    "difficulty": b.header.difficulty,
+                    "timestamp": b.header.timestamp
+                }))
+            } else {
+                Json(json!({"height": 0}))
+            }
+        }
+
+        async fn mempool_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
+            let mp = node.mempool.read().await;
+            let count = mp.len();
+            Json(json!({"tx_count": count}))
+        }
+
+        async fn mining_handler(State(node): State<Arc<Node>>) -> Json<serde_json::Value> {
+            let cfg = node.config.miner.clone();
+            let s: NodeState = node.state.read().await.clone();
+            Json(json!({"enabled": cfg.enabled, "state": format!("{:?}", s), "threads": cfg.threads }))
+        }
+
+        let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+        info!("Starting axum API server on {}", addr);
+
+        let app = Router::new()
+            .route("/status", get(status_handler))
+            .route("/node/state", get(node_state_handler))
+            .route("/peers", get(peers_handler))
+            .route("/chain/head", get(chain_head_handler))
+            .route("/mempool", get(mempool_handler))
+            .route("/mining/status", get(mining_handler))
+            .with_state(node.clone());
+
+        Server::bind(&addr).serve(app.into_make_service()).await?;
         Ok(())
     }
 
@@ -218,4 +289,5 @@ impl Node {
     async fn start_api(_node: Arc<Self>, _port: u16) -> Result<(), Box<dyn std::error::Error>> {
         Err("API feature not enabled in this build".into())
     }
+
 }

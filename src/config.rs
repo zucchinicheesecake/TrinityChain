@@ -30,7 +30,7 @@ pub struct DatabaseConfig {
     pub path: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MinerConfig {
     pub threads: usize,
     pub beneficiary_address: String,
