@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, Boxes, Clock, TrendingUp, Award, Coins, Layers, Zap, Database, Target, Search, ChevronDown, ChevronUp, Network, Cpu, BarChart3, Terminal, RefreshCw, Settings, Play, Pause, Send } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import TransactionManager from './TransactionManager';
 import NetworkManager from './NetworkManager';
 import DiagnosticTerminal from './DiagnosticTerminal';
 
@@ -291,7 +290,6 @@ const TrinityChainDashboard = () => {
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-            { id: 'transactions', label: 'Transactions', icon: Send },
             { id: 'network', label: 'Network', icon: Network },
             { id: 'analytics', label: 'Analytics', icon: Activity },
             { id: 'explorer', label: 'Block Explorer', icon: Boxes }
@@ -310,13 +308,6 @@ const TrinityChainDashboard = () => {
             </button>
           ))}
         </div>
-
-        {/* Transactions Tab */}
-        {activeTab === 'transactions' && (
-          <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/20 shadow-xl">
-            <TransactionManager nodeUrl={nodeUrl} />
-          </div>
-        )}
 
         {/* Network Tab */}
         {activeTab === 'network' && (
