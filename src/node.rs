@@ -227,7 +227,6 @@ impl Node {
         info!("Starting axum API server (shared) on 0.0.0.0:{}", port);
         crate::api::run_api_server(api_node).await?;
         Ok(())
-        Ok(())
     }
 
     #[cfg(not(feature = "api"))]
