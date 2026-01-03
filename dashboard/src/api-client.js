@@ -74,27 +74,6 @@ class TrinityChainAPI {
   }
 
   // ============================================================================
-  // MINING ENDPOINTS
-  // ============================================================================
-
-  async startMining(minerAddress) {
-    return this.request('/api/mining/start', {
-      method: 'POST',
-      body: JSON.stringify({ miner_address: minerAddress }),
-    });
-  }
-
-  async stopMining() {
-    return this.request('/api/mining/stop', {
-      method: 'POST',
-    });
-  }
-
-  async getMiningStatus() {
-    return this.request('/api/mining/status');
-  }
-
-  // ============================================================================
   // NETWORK ENDPOINTS
   // ============================================================================
 
