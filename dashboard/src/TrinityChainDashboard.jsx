@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Activity, Boxes, Clock, TrendingUp, Award, Coins, Layers, Zap, Database, Target, Search, ChevronDown, ChevronUp, Network, Cpu, BarChart3, Terminal, RefreshCw, Settings, Play, Pause, Wallet, Send, Zap as Mining } from 'lucide-react';
+import { Activity, Boxes, Clock, TrendingUp, Award, Coins, Layers, Zap, Database, Target, Search, ChevronDown, ChevronUp, Network, Cpu, BarChart3, Terminal, RefreshCw, Settings, Play, Pause, Wallet, Send } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import WalletManager from './WalletManager';
 import TransactionManager from './TransactionManager';
-import MiningManager from './MiningManager';
 import NetworkManager from './NetworkManager';
 import DiagnosticTerminal from './DiagnosticTerminal';
 
@@ -77,8 +76,6 @@ const TrinityChainDashboard = () => {
         mempoolSize: statsData.mempool_size || 0,
         totalBlocks: statsData.total_blocks || 0,
         // Add dummy values for missing fields
-        blocksMined: statsData.height || 0,
-        totalEarned: 0,
         currentReward: 0,
         avgBlockTime: 10, // dummy
         uptime: 0,
@@ -211,7 +208,7 @@ const TrinityChainDashboard = () => {
                   <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
                     TrinityChain
                   </h1>
-                  <p className="text-xs text-purple-300">Mining Dashboard v0.2.0</p>
+                  <p className="text-xs text-purple-300">Chain Dashboard v0.2.0</p>
                 </div>
               </div>
             </div>
@@ -297,7 +294,6 @@ const TrinityChainDashboard = () => {
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
             { id: 'wallet', label: 'Wallet', icon: Wallet },
             { id: 'transactions', label: 'Transactions', icon: Send },
-            { id: 'mining', label: 'Mining', icon: Mining },
             { id: 'network', label: 'Network', icon: Network },
             { id: 'analytics', label: 'Analytics', icon: Activity },
             { id: 'explorer', label: 'Block Explorer', icon: Boxes }
@@ -331,13 +327,6 @@ const TrinityChainDashboard = () => {
           </div>
         )}
 
-        {/* Mining Tab */}
-        {activeTab === 'mining' && (
-          <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/20 shadow-xl">
-            <MiningManager nodeUrl={nodeUrl} />
-          </div>
-        )}
-
         {/* Network Tab */}
         {activeTab === 'network' && (
           <div className="space-y-6">
@@ -353,22 +342,8 @@ const TrinityChainDashboard = () => {
                 icon={<Boxes className="text-purple-400" size={28} />}
                 label="Chain Height"
                 value={stats ? formatFullNumber(stats.chainHeight || 0) : "Loading..."}
-                subtext={stats ? `${formatNumber(stats.blocksMined || 0)} mined` : ""}
+                subtext={stats ? `Total Blocks: ${formatNumber(stats.totalBlocks || 0)}` : ""}
                 gradient="from-purple-600 to-purple-800"
-              />
-              <HeroStatCard
-                icon={<Zap className="text-yellow-400" size={28} />}
-                label="Hashrate"
-                value={stats ? `${calculateHashrate()} H/s` : "Loading..."}
-                subtext={stats ? `Difficulty: ${stats.difficulty || 0}` : ""}
-                gradient="from-yellow-600 to-orange-600"
-              />
-              <HeroStatCard
-                icon={<Coins className="text-green-400" size={28} />}
-                label="Total Earned"
-                value={stats ? formatNumber(stats.totalEarned || 0) : "Loading..."}
-                subtext={stats ? `${formatNumber(stats.currentReward || 0)} per block` : ""}
-                gradient="from-green-600 to-emerald-600"
               />
               <HeroStatCard
                 icon={<Clock className="text-blue-400" size={28} />}
@@ -499,7 +474,7 @@ const TrinityChainDashboard = () => {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold">Latest Blocks</h3>
-                    <p className="text-purple-300 text-sm">Most recent mining activity</p>
+                    <p className="text-purple-300 text-sm">Most recent blocks</p>
                   </div>
                 </div>
               </div>
