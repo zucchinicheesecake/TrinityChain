@@ -225,8 +225,8 @@ impl Node {
         std::env::set_var("PORT", port.to_string());
 
         info!("Starting axum API server (shared) on 0.0.0.0:{}", port);
-
         crate::api::run_api_server(api_node).await?;
+        Ok(())
         Ok(())
     }
 
